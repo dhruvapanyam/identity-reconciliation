@@ -9,25 +9,29 @@ const db = new sqlite3.Database('./databases/contacts.db', (err) => {
     console.log(`Connected to the CONTACTS database!`);
 
     // createTable();
-    // createNewContact("1", "A", "primary");
-    // createNewContact("3", "A", "secondary", 1);
-    // createNewContact("1", "C", "secondary", 1);
-    // createNewContact("4", "C", "secondary", 3);
-    // createNewContact("2", "B", "primary");
     // getAllContacts()
     // clearTable();
 
-    handleCheckoutInformation("2", "D");
+    // handleCheckoutInformation("4","E");
 
-    // getSuperParent(4, id=>{
-    //     console.log('super parent = ',id)
-    // })
 
 })
 
 
 // Relevant SQL basic functions
 // ------------------------------------------------------
+
+async function runQuery(command){
+    console.log(command)
+    let response = await new Promise((resolve, reject) => {
+        db.all(command, (err, rows) => {
+            if(err){reject(err);}
+            resolve(rows);
+        })
+    })
+    return response;
+}
+
 function createTable(){
     let command = `
         CREATE TABLE Contact(
@@ -52,19 +56,22 @@ function createTable(){
 }
 
 // Function to create new contact entry
-function createNewContact(phoneNumber, email, linkPrecedence, linkedId=null){
+async function createNewContact(phoneNumber, email, linkPrecedence, linkedId=null){
     let curDate = new Date().toISOString()
     let command = `
         INSERT INTO Contact (phoneNumber, email, linkedId, linkPrecedence, createdAt, updatedAt)
         VALUES ("${phoneNumber}", "${email}", ${linkedId}, "${linkPrecedence}", "${curDate}", "${curDate}")
     `
 
-    db.exec(command, (err) => {
-        if(err){
-            throw err;
-        }
+    await new Promise((resolve, reject) => {
+        db.exec(command, (err) => {
+            if(err){
+                reject(err);
+            }
 
-        console.log(`Inserted new ${linkPrecedence} contact!`);
+            console.log(`Inserted new ${linkPrecedence} contact!`);
+            resolve()
+        })
     })
 }
 
@@ -110,18 +117,24 @@ function clearTable(){
 // ---------------
 
 // get row data given a contact id
-function getContactData(id, callback){
-    db.get(`SELECT * FROM Contact WHERE id=${id}`, [], (err,data) => {
-        if(err){throw err;}
-        // console.log(`fetched data for id ${id}`)
-        callback(data);
+async function getContactData(id, callback){
+    let data = await new Promise((resolve, reject) => {
+        db.get(`SELECT * FROM Contact WHERE id=${id}`, [], (err,data) => {
+            if(err){reject(err);}
+            // console.log(`fetched data for id ${id}`)
+            resolve(data);
+        })
     })
+
+    return data;
 }
 
 // given an id number, find its super-parent (climb up the linkedId ladder until we reach a primary contact)
-function getSuperParent(id, callback){
+async function getSuperParent(id, callback){
     
-    const handleContactData = (data) => {   // callback function once we get the contact data from the db
+    let contactData = await getContactData(id);
+    while(true){
+        let data = contactData;
         if(data == undefined) throw `No data found...!`
         
         let lId = data?.linkedId;
@@ -129,17 +142,61 @@ function getSuperParent(id, callback){
 
         if(lP == "primary"){
             // found super-parent of id
-            callback(data.id); // callback function from the request of "getSupeParent()"
-            return;
+            return data;
         }
 
         if(lP == "secondary" && lId == null) throw `Inconsistent link data!`
 
-        getContactData(lId, handleContactData); // if secondary contact, get contact data using the linkedId value
+        contactData = await getContactData(lId); // if secondary contact, get contact data using the linkedId value
+    }
+    
+}
+
+async function convertPrimaryToSecondary(id, lId){
+    let curTime = new Date().toISOString();
+    let command = `
+        UPDATE Contact
+        SET linkPrecedence = "secondary",
+            linkedId = ${lId},
+            updatedAt = "${curTime}"
+        WHERE id = ${id}
+    `
+
+    await new Promise((resolve, reject) => {
+        db.exec(command, (err) => {
+            if(err){reject(err);}
+            resolve();
+        })
+    })
+    return;
+}
+
+// given a contact id, find all contacts in its branch
+async function expandBranch(id){
+    let command = `
+        SELECT id, phoneNumber, email, linkedId FROM Contact
+        WHERE linkedId = ${id}
+    `
+
+    console.log('expanding',id)
+    let subContacts = await new Promise((resolve, reject) => {
+        db.all(command, [], (err, rows) => {
+            if(err){reject(err);}
+            resolve(rows);
+        })
+    })
+
+    let res = [...subContacts];
+
+    for(let i=0; i<subContacts.length; i++){
+        let subChildren = await expandBranch(subContacts[i].id);
+        res.push(...subChildren);
     }
 
-    getContactData(id, handleContactData);
-    
+
+    return res;
+
+
 }
 
 // given checkout info from /identify endpoint, consolidate all relevant information
@@ -186,15 +243,67 @@ async function handleCheckoutInformation(phoneNumber, email){
         })
     })
 
+    let superPrimaryContact;
 
     if(phoneBranchNodeId == undefined || emailBranchNodeId == undefined){
         // new contact information has been obtained
+        console.log('new contact reqd')
+        if(phoneBranchNodeId == undefined && emailBranchNodeId == undefined){
+            // create a new primary contact
+            console.log('new prim')
+            await createNewContact(phoneNumber, email, "primary")
+            console.log('getting superparent')
+            superPrimaryContact = (await runQuery(`SELECT * FROM Contact WHERE phoneNumber=${phoneNumber}`))[0]
+        }
+        else if(phoneBranchNodeId != undefined){
+            console.log('new sec')
+            // create a new contact that links to the contact with id=phoneBranchNodeId
+            await createNewContact(phoneNumber, email, "secondary", phoneBranchNodeId);
+            superPrimaryContact = await getSuperParent(phoneBranchNodeId);
+        }
+        else{
+            console.log('new sec')
+            await createNewContact(phoneNumber, email, "secondary", emailBranchNodeId);
+            superPrimaryContact = await getSuperParent(emailBranchNodeId);
+        }
     }
 
     else{
         // find super-parents of phone and email branches
         // if they are not the same, then merge the newer one into the older one
+
+        console.log('both exist')
+
+        let phoneBranchRoot = await getSuperParent(phoneBranchNodeId);
+        let emailBranchRoot = await getSuperParent(emailBranchNodeId);
+
+
+        if(phoneBranchRoot.id == emailBranchRoot.id){
+            // both branches came from the same root
+            // no further action required
+        }
+        else if(phoneBranchRoot.id < emailBranchRoot.id){
+            // update emailRoot to have linkedId = phoneRoot
+            await convertPrimaryToSecondary(emailBranchRoot.id, phoneBranchRoot.id);
+        }
+        else{
+            // update phoneRoot to have linkedId = emailRoot
+            await convertPrimaryToSecondary(phoneBranchRoot.id, emailBranchRoot.id);
+        }
+
+
+        superPrimaryContact = phoneBranchRoot.id < emailBranchRoot.id ? phoneBranchRoot : emailBranchRoot
+
     }
+
+    console.log('Expanding from super root:',superPrimaryContact)
+
+
+
+    let res = [superPrimaryContact];
+    res.push(...await expandBranch(superPrimaryContact.id))
+
+    console.log(res)
 
 
 }
