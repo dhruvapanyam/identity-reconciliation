@@ -22,7 +22,7 @@ const db = new sqlite3.Database('./databases/contacts.db', (err) => {
 // ------------------------------------------------------
 
 async function runQuery(command){
-    console.log(command)
+    // console.log(command)
     let response = await new Promise((resolve, reject) => {
         db.all(command, (err, rows) => {
             if(err){reject(err);}
@@ -178,7 +178,7 @@ async function expandBranch(id){
         WHERE linkedId = ${id}
     `
 
-    console.log('expanding',id)
+    // console.log('expanding',id)
     let subContacts = await new Promise((resolve, reject) => {
         db.all(command, [], (err, rows) => {
             if(err){reject(err);}
@@ -247,22 +247,22 @@ async function handleCheckoutInformation(phoneNumber, email){
 
     if(phoneBranchNodeId == undefined || emailBranchNodeId == undefined){
         // new contact information has been obtained
-        console.log('new contact reqd')
+        // console.log('new contact reqd')
         if(phoneBranchNodeId == undefined && emailBranchNodeId == undefined){
             // create a new primary contact
-            console.log('new prim')
+            // console.log('new prim')
             await createNewContact(phoneNumber, email, "primary")
-            console.log('getting superparent')
+            // console.log('getting superparent')
             superPrimaryContact = (await runQuery(`SELECT * FROM Contact WHERE phoneNumber=${phoneNumber}`))[0]
         }
         else if(phoneBranchNodeId != undefined){
-            console.log('new sec')
+            // console.log('new sec')
             // create a new contact that links to the contact with id=phoneBranchNodeId
             await createNewContact(phoneNumber, email, "secondary", phoneBranchNodeId);
             superPrimaryContact = await getSuperParent(phoneBranchNodeId);
         }
         else{
-            console.log('new sec')
+            // console.log('new sec')
             await createNewContact(phoneNumber, email, "secondary", emailBranchNodeId);
             superPrimaryContact = await getSuperParent(emailBranchNodeId);
         }
@@ -272,7 +272,7 @@ async function handleCheckoutInformation(phoneNumber, email){
         // find super-parents of phone and email branches
         // if they are not the same, then merge the newer one into the older one
 
-        console.log('both exist')
+        // console.log('both exist')
 
         let phoneBranchRoot = await getSuperParent(phoneBranchNodeId);
         let emailBranchRoot = await getSuperParent(emailBranchNodeId);
@@ -296,14 +296,50 @@ async function handleCheckoutInformation(phoneNumber, email){
 
     }
 
-    console.log('Expanding from super root:',superPrimaryContact)
+    // console.log('Expanding from super root:',superPrimaryContact.id)
 
 
 
-    let res = [superPrimaryContact];
+    let res = [];
     res.push(...await expandBranch(superPrimaryContact.id))
 
-    console.log(res)
 
+    // Final response:
+    // contact: {
+    //      primaryContactId: superPrimaryContact.id,
+    //      emails: [...],
+    //      phoneNumbers: [...],
+    //      secondaryContacts: [...]
+    // }
+
+
+
+    let response_data = {
+        contact: {
+            primaryContactId: superPrimaryContact.id,
+            emails: [superPrimaryContact.email],
+            phoneNumbers: [superPrimaryContact.phoneNumber],
+            secondaryContacts: []
+        }
+    };
+
+    let email_done = new Set(superPrimaryContact.email);
+    let phone_done = new Set(superPrimaryContact.phoneNumber);
+
+    res.forEach((contact) => {
+        if(!email_done.has(contact.email)){
+            response_data.contact.emails.push(contact.email);
+            email_done.add(contact.email);
+        }
+        if(!phone_done.has(contact.phoneNumber)){
+            response_data.contact.phoneNumbers.push(contact.phoneNumber);
+            phone_done.add(contact.phoneNumber);
+        }
+
+        response_data.contact.secondaryContacts.push(contact.id)
+    })
+
+
+    return response_data;
 
 }
