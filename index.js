@@ -9,9 +9,20 @@ const db = new sqlite3.Database('./databases/contacts.db', (err) => {
     console.log(`Connected to the CONTACTS database!`);
 
     // createTable();
-    // createNewContact("123456", "testing@gmail.com", "primary")
+    // createNewContact("1", "A", "primary");
+    // createNewContact("3", "A", "secondary", 1);
+    // createNewContact("1", "C", "secondary", 1);
+    // createNewContact("4", "C", "secondary", 3);
+    // createNewContact("2", "B", "primary");
     // getAllContacts()
     // clearTable();
+
+    handleCheckoutInformation("2", "D");
+
+    // getSuperParent(4, id=>{
+    //     console.log('super parent = ',id)
+    // })
+
 })
 
 
@@ -90,4 +101,100 @@ function clearTable(){
 
         console.log(`Cleared table Contact!`);
     })
+}
+
+
+
+
+// MAIN logic
+// ---------------
+
+// get row data given a contact id
+function getContactData(id, callback){
+    db.get(`SELECT * FROM Contact WHERE id=${id}`, [], (err,data) => {
+        if(err){throw err;}
+        // console.log(`fetched data for id ${id}`)
+        callback(data);
+    })
+}
+
+// given an id number, find its super-parent (climb up the linkedId ladder until we reach a primary contact)
+function getSuperParent(id, callback){
+    
+    const handleContactData = (data) => {   // callback function once we get the contact data from the db
+        if(data == undefined) throw `No data found...!`
+        
+        let lId = data?.linkedId;
+        let lP = data?.linkPrecedence;
+
+        if(lP == "primary"){
+            // found super-parent of id
+            callback(data.id); // callback function from the request of "getSupeParent()"
+            return;
+        }
+
+        if(lP == "secondary" && lId == null) throw `Inconsistent link data!`
+
+        getContactData(lId, handleContactData); // if secondary contact, get contact data using the linkedId value
+    }
+
+    getContactData(id, handleContactData);
+    
+}
+
+// given checkout info from /identify endpoint, consolidate all relevant information
+async function handleCheckoutInformation(phoneNumber, email){
+    // check if either phoneNumber or email is a new value
+
+    // we identify 2 branches if existing:
+    //      1. phoneBranch -> heirarchy of contacts with a common phoneNumber with the query
+    //      2. emailBranch -> heirarchy of contacts with a common email with the query
+    // to find the branch, we only need to find any row with a common value with the query
+
+
+    // find first entry where email = email
+    let commandEmail = `
+        SELECT id FROM Contact
+        WHERE email = '${email}'
+        LIMIT 1
+    `
+
+    // find first entry where phoneNumber = phoneNumber
+    let commandPhone = `
+        SELECT id FROM Contact
+        WHERE phoneNumber = '${phoneNumber}'
+        LIMIT 1
+    `
+
+    // async-await used to determine existence of rows before continuing
+
+    let phoneBranchNodeId = await new Promise((resolve, reject) => {
+        db.get(commandPhone, [], (err, data) => {
+            if(err){
+                reject(err);
+            }
+            resolve(data?.id); // returns the id of the row required if exists, else undefined
+        })
+    })
+
+    let emailBranchNodeId = await new Promise((resolve, reject) => {
+        db.get(commandEmail, [], (err, data) => {
+            if(err){
+                reject(err);
+            }
+            resolve(data?.id);
+        })
+    })
+
+
+    if(phoneBranchNodeId == undefined || emailBranchNodeId == undefined){
+        // new contact information has been obtained
+    }
+
+    else{
+        // find super-parents of phone and email branches
+        // if they are not the same, then merge the newer one into the older one
+    }
+
+
 }
