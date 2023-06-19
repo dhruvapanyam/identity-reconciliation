@@ -25,6 +25,16 @@ async function runQuery(command){
     })
     return response;
 }
+async function runCommand(command){
+    // console.log(command)
+    await new Promise((resolve, reject) => {
+        db.exec(command, (err) => {
+            if(err){reject(err);}
+            resolve();
+        })
+    })
+    return;
+}
 
 // function createTable(){
 //     let command = `
@@ -56,17 +66,7 @@ async function createNewContact(phoneNumber, email, linkPrecedence, linkedId=nul
         INSERT INTO Contact (phoneNumber, email, linkedId, linkPrecedence, createdAt, updatedAt)
         VALUES ("${phoneNumber}", "${email}", ${linkedId}, "${linkPrecedence}", "${curDate}", "${curDate}")
     `
-
-    await new Promise((resolve, reject) => {
-        db.exec(command, (err) => {
-            if(err){
-                reject(err);
-            }
-
-            // console.log(`Inserted new ${linkPrecedence} contact!`);
-            resolve()
-        })
-    })
+    await runCommand(command);
 }
 
 
@@ -75,8 +75,8 @@ function clearTable(){
     let command = `
         DELETE FROM Contact
     `
-    db.exec(command, (err) => {
-        if(err){throw err;}
+    runCommand(command)
+    .then(() => {
         console.log(`Cleared table Contact!`);
     })
 }
@@ -89,15 +89,9 @@ function clearTable(){
 
 // get row data given a contact id
 async function getContactData(id){
-    let data = await new Promise((resolve, reject) => {
-        db.get(`SELECT * FROM Contact WHERE id=${id}`, [], (err,data) => {
-            if(err){reject(err);}
-            // console.log(`fetched data for id ${id}`)
-            resolve(data);
-        })
-    })
-
-    return data;
+    let contactData = await runQuery(`SELECT * FROM Contact WHERE id=${id}`);
+    if(contactData.length == 0) return;
+    return contactData;
 }
 
 // given an id number, find its super-parent (climb up the linkedId ladder until we reach a primary contact)
@@ -135,13 +129,7 @@ async function convertPrimaryToSecondary(id, lId){
             updatedAt = "${curTime}"
         WHERE id = ${id}
     `
-
-    await new Promise((resolve, reject) => {
-        db.exec(command, (err) => {
-            if(err){reject(err);}
-            resolve();
-        })
-    })
+    await runCommand(command);
     return;
 }
 
@@ -156,12 +144,7 @@ async function expandBranch(id){
     `
 
     // console.log('expanding',id)
-    let subContacts = await new Promise((resolve, reject) => {
-        db.all(command, [], (err, rows) => {
-            if(err){reject(err);}
-            resolve(rows);
-        })
-    })
+    let subContacts = await runQuery(command);
 
     let res = [...subContacts];
 
