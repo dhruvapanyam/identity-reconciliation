@@ -28,6 +28,6 @@ app.post('/clear', (req, res) => {
 })
 
 app.listen(8080, () => {
-    console.log('Listening no port 8080...')
+    console.log('Listening on port 8080...')
 })
 

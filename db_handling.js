@@ -91,22 +91,26 @@ function clearTable(){
 async function getContactData(id){
     let contactData = await runQuery(`SELECT * FROM Contact WHERE id=${id}`);
     if(contactData.length == 0) return;
-    return contactData;
+    return contactData[0];
 }
 
 // given an id number, find its super-parent (climb up the linkedId ladder until we reach a primary contact)
-async function getSuperParent(id, callback){
+async function getSuperParent(id){
     
+    // console.log('getting contact data of',id)
     let contactData = await getContactData(id);
     while(true){
         let data = contactData;
         if(data == undefined) throw `No data found...!`
+
+        // console.log(data)
         
         let lId = data?.linkedId;
         let lP = data?.linkPrecedence;
 
         if(lP == "primary"){
             // found super-parent of id
+            // console.log('found superparent')
             return data;
         }
 
