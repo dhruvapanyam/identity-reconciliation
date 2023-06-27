@@ -5,11 +5,7 @@ const bodyParser = require('body-parser');
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 
-const PORT = 8080 || process.env.PORT
-
-app.get('/', (req, res) => {
-    return res.json([1,2,3])
-})
+const PORT =  process.env.PORT || 8080
 
 app.post('/identify', (req, res) => {
     let email = req.body.email;
