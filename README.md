@@ -31,7 +31,7 @@ To build and setup the docker image, run ```docker build -t <tagname> .```
 Once the image has been built, run a container and expose and publish the `8080` port by running
 ```docker run -p 8080:8080 <image>```
 
-The API endpoints will be exposed at port `8080`. To submit requests to the API, use the URL `localhost:8080` or `0.0.0.0:8080`.
+The API endpoints will be exposed at port `8080`. To submit requests to the API, use the URL `localhost:8080` or `0.0.0.0:8080`. (Note: these are http:// URLs and not https://)
 
 ### `/identify` endpoint
 This endpoint listens for a POST request with an `email` and `phoneNumber` in the request body. The response will show all the contact details for this corresponding contact.
