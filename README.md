@@ -1,7 +1,6 @@
 # Identity Reconciliation
 
-Server hosted at: ...
-(Note: please visit the website to wake it up. Glitch makes projects sleep after 5 mins of inactivity)
+Backend Task for application process to Backend Developer role at Bitespeed
 
 ## Implementation Logic
 
